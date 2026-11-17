@@ -1,0 +1,6 @@
+{
+  "name": "AutoDub Edge",
+  "description": "Real-time Android Visual Novel screen translator and multi-character AI voice dubbing engineering studio & Kotlin Jetpack Compose project.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

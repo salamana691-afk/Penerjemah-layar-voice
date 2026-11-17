@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AutoDub Edge</string>
+    <string name="capture_notification_channel_name">Screen Capture &amp; OCR</string>
+    <string name="capture_notification_channel_desc">Menjalankan tangkapan layar real-time untuk penerjemahan Visual Novel.</string>
+    <string name="overlay_notification_channel_name">Floating Translation Overlay</string>
+    <string name="overlay_notification_channel_desc">Menampilkan terjemahan dan kontrol dubbing di atas game.</string>
+    <string name="notification_stop_action">Hentikan</string>
+</resources>
