@@ -10,6 +10,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <package android:name="top.initsnow.edge_tts_android" />
+        <package android:name="com.google.android.tts" />
+    </queries>
+
     <application
         android:name=".AutoDubApplication"
         android:allowBackup="true"
