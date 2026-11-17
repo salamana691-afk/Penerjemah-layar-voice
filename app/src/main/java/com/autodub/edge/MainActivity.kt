@@ -1,6 +1,9 @@
 package com.autodub.edge
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
@@ -8,6 +11,12 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -71,22 +80,75 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        refreshPermissions()
 
-        setContent {
-            AutoDubEdgeTheme {
-                AutoDubAppScaffold(
-                    mainViewModel = mainViewModel,
-                    characterViewModel = characterViewModel,
-                    hasOverlayPermission = hasOverlayPermission,
-                    hasNotificationPermission = hasNotificationPermission,
-                    onRequestOverlayPermission = { requestOverlayPermission() },
-                    onRequestNotificationPermission = { requestNotificationPermission() },
-                    onStartCaptureFlow = { startCaptureAndOverlay() },
-                    onStopCaptureAndOverlay = { stopAllServices() }
-                )
+        val crashLog = intent.getStringExtra("CRASH_LOG")
+        if (crashLog != null) {
+            showCrashScreen(crashLog)
+            return
+        }
+
+        Thread.setDefaultUncaughtExceptionHandler { _, throwable ->
+            val stackTrace = Log.getStackTraceString(throwable)
+            val restartIntent = Intent(this, MainActivity::class.java).apply {
+                putExtra("CRASH_LOG", stackTrace)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            }
+            startActivity(restartIntent)
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }
+
+        try {
+            refreshPermissions()
+            setContent {
+                AutoDubEdgeTheme {
+                    AutoDubAppScaffold(
+                        mainViewModel = mainViewModel,
+                        characterViewModel = characterViewModel,
+                        hasOverlayPermission = hasOverlayPermission,
+                        hasNotificationPermission = hasNotificationPermission,
+                        onRequestOverlayPermission = { requestOverlayPermission() },
+                        onRequestNotificationPermission = { requestNotificationPermission() },
+                        onStartCaptureFlow = { startCaptureAndOverlay() },
+                        onStopCaptureAndOverlay = { stopAllServices() }
+                    )
+                }
+            }
+        } catch (t: Throwable) {
+            showCrashScreen(Log.getStackTraceString(t))
+        }
+    }
+
+    private fun showCrashScreen(errorText: String) {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(32, 48, 32, 32)
+            setBackgroundColor(0xFF0D1117.toInt())
+        }
+        val title = TextView(this).apply {
+            text = "CRASH TERDETEKSI (Copy & kirim ke Gemini):"
+            textSize = 16f
+            setTextColor(0xFFFF5555.toInt())
+        }
+        val copyBtn = Button(this).apply {
+            text = "SALIN LOG ERROR"
+            setOnClickListener {
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("CrashLog", errorText))
+                Toast.makeText(this@MainActivity, "Error berhasil disalin!", Toast.LENGTH_SHORT).show()
             }
         }
+        val scroll = ScrollView(this)
+        val body = TextView(this).apply {
+            text = errorText
+            textSize = 12f
+            setTextColor(0xFFFFFFFF.toInt())
+            setTextIsSelectable(true)
+        }
+        scroll.addView(body)
+        layout.addView(title)
+        layout.addView(copyBtn)
+        layout.addView(scroll)
+        setContentView(layout)
     }
 
     override fun onResume() {
