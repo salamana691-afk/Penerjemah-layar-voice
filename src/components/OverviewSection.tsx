@@ -28,24 +28,24 @@ const PIPELINE_STEPS = [
     detail: 'Google ML Kit Translation EN → ID dengan unduh model otomatis, cache LRU 250 entri, dan mode offline penuh.',
   },
   {
-    step: '05. SSML & Voice Engine',
-    component: 'VoiceOrchestrator',
-    detail: 'Menghasilkan SSML tervalidasi (anti-XSS/XML injection) untuk Edge-Compatible WS TTS dengan fallback otomatis Android TextToSpeech.',
+    step: '05. AI Expressive Voice',
+    component: 'GeminiExpressiveVoiceEngine',
+    detail: 'Voice Design via Gemini 3.8 TTS dengan persona anime orisinal, 8 Emotion Control, Custom Voice Description, serta TtsAudioCache disk LRU.',
   },
   {
-    step: '06. Audio & Overlay',
-    component: 'AudioPlaybackManager',
-    detail: 'Media3 ExoPlayer memutar dubbing sesuai kebijakan antrean (Replace / Finish / Queue All) bersamaan dengan Floating Translation Overlay.',
+    step: '06. Dual Auto-Switch & Audio',
+    component: 'VoiceOrchestrator',
+    detail: 'Auto-switching Online AI ↔ Offline Android TTS tanpa audio ganda atau mengulang dialog, diputar Media3 ExoPlayer & Floating Overlay.',
   },
 ];
 
 const ACCEPTANCE_ITEMS = [
   'Minimum Android 8.0 (API 26), targetSdk 35, AGP 8.7.3 & Kotlin 2.0.21',
-  'Room Database v2 dengan MIGRATION_1_2 dan profil karakter permanen',
-  'DataStore Preferences untuk tata letak Dual-Box ROI dan tampilan overlay',
-  'Izin runtime POST_NOTIFICATIONS, SYSTEM_ALERT_WINDOW, dan MediaProjection',
-  'Penanganan error terstruktur via AppResult & AppError tanpa crash',
-  'Unit test & instrumentation test untuk normalizer, matcher, SSML, dan Room',
+  'Room Database v3 (MIGRATION_1_2 & MIGRATION_2_3) untuk persona, emosi, & profil suara',
+  'Dual Voice Engine: Automatic Mode (Online ↔ Offline) & Manual Mode via NetworkConnectivityMonitor',
+  'Gemini Expressive TTS + Disk Audio Cache agar dialog identik tidak di-generate ulang',
+  'Penanganan error terstruktur via AppResult & AppError tanpa menghentikan OCR/Translation offline',
+  'Unit test & instrumentation test untuk normalizer, matcher, SSML, Dual Voice, dan Room',
 ];
 
 export function OverviewSection({

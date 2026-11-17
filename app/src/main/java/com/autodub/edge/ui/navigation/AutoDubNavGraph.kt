@@ -69,10 +69,12 @@ fun AutoDubAppScaffold(
     val dubbingSettings by mainViewModel.dubbingSettingsState.collectAsState()
     val recentDialogues by mainViewModel.recentDialogues.collectAsState()
     val availableVoices by mainViewModel.availableVoices.collectAsState()
+    val cacheSizeBytes by mainViewModel.cacheSizeBytes.collectAsState()
     val feedback by mainViewModel.feedbackMessage.collectAsState()
 
     val characters by characterViewModel.characters.collectAsState()
     val providerVoices by characterViewModel.providerVoices.collectAsState()
+    val offlineVoices by characterViewModel.offlineVoices.collectAsState()
     val characterStatus by characterViewModel.statusMessage.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -166,11 +168,15 @@ fun AutoDubAppScaffold(
                 CharacterManagerScreen(
                     characters = characters,
                     availableVoices = providerVoices,
+                    offlineVoices = offlineVoices,
                     statusMessage = characterStatus,
                     onLoadVoicesForProvider = { characterViewModel.loadVoices(it) },
                     onSaveCharacter = { characterViewModel.saveCharacter(it) },
                     onDeleteCharacter = { characterViewModel.deleteCharacter(it) },
                     onTestVoice = { characterViewModel.testVoice(it) },
+                    onBuildVoicePromptPreview = { profile ->
+                        characterViewModel.buildVoicePromptPreview(profile)
+                    },
                     onBuildSsmlPreview = { profile, sample ->
                         characterViewModel.buildSsmlPreview(profile, sample)
                     }
@@ -180,8 +186,10 @@ fun AutoDubAppScaffold(
                 VoiceSettingsScreen(
                     settings = dubbingSettings,
                     availableVoices = availableVoices,
+                    cacheSizeBytes = cacheSizeBytes,
                     onProviderChanged = { mainViewModel.loadVoicesForProvider(it.id) },
                     onSaveSettings = { mainViewModel.saveDubbingSettings(it) },
+                    onClearAudioCache = { mainViewModel.clearAudioCache() },
                     onTestVoice = { mainViewModel.testGlobalVoice() },
                     onSkipCurrent = { mainViewModel.skipAudio() }
                 )

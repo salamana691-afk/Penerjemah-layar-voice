@@ -153,6 +153,12 @@ fun DashboardScreen(
             )
 
             StatusLine(
+                label = "Koneksi & Dual Voice Mode",
+                value = "${if (runtimeState.isNetworkOnline) "Online" else "Offline"} · ${runtimeState.activeVoiceProviderLabel}",
+                valueColor = if (runtimeState.isNetworkOnline) CyberColors.CyberCyan else CyberColors.AmberWarn
+            )
+
+            StatusLine(
                 label = "AI Voice Engine",
                 value = when (runtimeState.voiceEngineStatus) {
                     VoiceEngineStatus.READY -> "Siap"
@@ -299,7 +305,7 @@ fun DashboardScreen(
                 recentDialogues.take(5).forEach { event ->
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            text = "${event.speakerName} · ${event.providerUsed}",
+                            text = "${event.speakerName} · ${event.emotionUsed} · ${event.providerUsed}${if (event.cacheHit) " (Cache)" else ""}",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = CyberColors.CyberCyan

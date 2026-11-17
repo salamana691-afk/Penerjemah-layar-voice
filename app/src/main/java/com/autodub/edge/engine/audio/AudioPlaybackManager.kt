@@ -84,7 +84,7 @@ class AudioPlaybackManager(
             when (policy) {
                 AudioQueuePolicy.REPLACE_CURRENT -> {
                     clearQueueInternal()
-                    activeTrack?.let { deleteFileSafely(it.file) }
+                    activeTrack?.let { deleteTempFileIfNotCached(it.file) }
                     activeTrack = null
                     playTrackNow(track)
                 }
@@ -103,7 +103,7 @@ class AudioPlaybackManager(
                     } else {
                         while (queue.size >= AppConstants.MAX_AUDIO_QUEUE_SIZE) {
                             val dropped = queue.removeFirst()
-                            deleteFileSafely(dropped.file)
+                            deleteTempFileIfNotCached(dropped.file)
                         }
                         queue.addLast(track)
                         publishState()
@@ -130,7 +130,7 @@ class AudioPlaybackManager(
     }
 
     private fun onTrackFinished() {
-        activeTrack?.let { deleteFileSafely(it.file) }
+        activeTrack?.let { deleteTempFileIfNotCached(it.file) }
         activeTrack = null
 
         val next = if (queue.isNotEmpty()) queue.removeFirst() else null
@@ -169,7 +169,7 @@ class AudioPlaybackManager(
             player?.stop()
             player?.clearMediaItems()
             clearQueueInternal()
-            activeTrack?.let { deleteFileSafely(it.file) }
+            activeTrack?.let { deleteTempFileIfNotCached(it.file) }
             activeTrack = null
             publishState()
         }
@@ -190,7 +190,7 @@ class AudioPlaybackManager(
     fun release() {
         scope.launch {
             clearQueueInternal()
-            activeTrack?.let { deleteFileSafely(it.file) }
+            activeTrack?.let { deleteTempFileIfNotCached(it.file) }
             activeTrack = null
             player?.release()
             player = null
@@ -200,11 +200,14 @@ class AudioPlaybackManager(
 
     private fun clearQueueInternal() {
         while (queue.isNotEmpty()) {
-            deleteFileSafely(queue.removeFirst().file)
+            deleteTempFileIfNotCached(queue.removeFirst().file)
         }
     }
 
-    private fun deleteFileSafely(file: File) {
+    private fun deleteTempFileIfNotCached(file: File) {
+        if (file.parentFile?.name == AppConstants.TTS_CACHE_DIR) {
+            return
+        }
         runCatching {
             if (file.exists()) {
                 file.delete()

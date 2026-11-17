@@ -22,9 +22,116 @@ enum class AudioQueuePolicy(val label: String, val description: String) {
     )
 }
 
-enum class VoiceProviderType(val id: String, val displayName: String) {
-    ANDROID_TTS(AppConstants.PROVIDER_ANDROID_TTS, "Android Native TTS (Offline)"),
-    EDGE_COMPATIBLE(AppConstants.PROVIDER_EDGE_COMPATIBLE, "Edge-Compatible WebSocket TTS")
+enum class VoiceEngineOperatingMode(val label: String, val description: String) {
+    AUTOMATIC(
+        label = "Automatic Mode (Dual Engine)",
+        description = "Otomatis memakai AI Expressive TTS saat online, beralih ke Android TTS saat offline, dan kembali ke AI saat koneksi pulih."
+    ),
+    MANUAL(
+        label = "Manual Mode",
+        description = "Menggunakan provider suara pilihan pengguna secara langsung."
+    )
+}
+
+enum class VoiceProviderType(val id: String, val displayName: String, val isOnlineProvider: Boolean) {
+    GEMINI_TTS(AppConstants.PROVIDER_GEMINI_TTS, "Gemini Expressive AI TTS (Online)", true),
+    EDGE_COMPATIBLE(AppConstants.PROVIDER_EDGE_COMPATIBLE, "Edge-Compatible WebSocket TTS (Online)", true),
+    ANDROID_TTS(AppConstants.PROVIDER_ANDROID_TTS, "Android Native TTS (Offline)", false)
+}
+
+enum class VoicePersonality(
+    val id: String,
+    val displayName: String,
+    val genderLabel: String,
+    val defaultGeminiVoice: String,
+    val stylePrompt: String
+) {
+    ANIME_FEMALE_GENTLE(
+        id = "ANIME_FEMALE_GENTLE",
+        displayName = "Sakura Gentle",
+        genderLabel = "Perempuan · Lembut & Hangat",
+        defaultGeminiVoice = "Kore",
+        stylePrompt = "Suara perempuan dewasa bergaya anime Jepang yang lembut, hangat, feminin, ramah, dengan artikulasi bahasa Indonesia yang jelas."
+    ),
+    ANIME_FEMALE_CHEERFUL(
+        id = "ANIME_FEMALE_CHEERFUL",
+        displayName = "Hana Bright",
+        genderLabel = "Perempuan · Ceria & Sedikit Manja",
+        defaultGeminiVoice = "Zephyr",
+        stylePrompt = "Suara perempuan dewasa bergaya anime Jepang yang lembut, ceria, sedikit manja, energik, dengan intonasi ekspresif dan artikulasi jelas."
+    ),
+    ANIME_FEMALE_COOL(
+        id = "ANIME_FEMALE_COOL",
+        displayName = "Rei Serene",
+        genderLabel = "Perempuan · Kalem & Tenang",
+        defaultGeminiVoice = "Aoede",
+        stylePrompt = "Suara perempuan dewasa bergaya anime Jepang yang kalem, tenang, dewasa, penuh kendali, dan bernada halus."
+    ),
+    ANIME_FEMALE_EXPRESSIVE(
+        id = "ANIME_FEMALE_EXPRESSIVE",
+        displayName = "Aoi Dramatic",
+        genderLabel = "Perempuan · Ekspresif & Dinamis",
+        defaultGeminiVoice = "Leda",
+        stylePrompt = "Suara perempuan dewasa bergaya anime Jepang yang sangat ekspresif, dinamis, penuh penjiwaan visual novel, dan responsif secara emosional."
+    ),
+    ANIME_MALE_CALM(
+        id = "ANIME_MALE_CALM",
+        displayName = "Kenji Calm",
+        genderLabel = "Laki-laki · Kalem & Berwibawa",
+        defaultGeminiVoice = "Charon",
+        stylePrompt = "Suara laki-laki dewasa bergaya anime Jepang yang tenang, berwibawa, jernih, rendah, dan stabil."
+    ),
+    ANIME_MALE_ENERGETIC(
+        id = "ANIME_MALE_ENERGETIC",
+        displayName = "Ren Energetic",
+        genderLabel = "Laki-laki · Energik & Tegas",
+        defaultGeminiVoice = "Puck",
+        stylePrompt = "Suara laki-laki dewasa bergaya anime Jepang yang energik, bersemangat, tegas, dan bertempo hidup."
+    ),
+    ANIME_MALE_MENTOR(
+        id = "ANIME_MALE_MENTOR",
+        displayName = "Haru Mentor",
+        genderLabel = "Laki-laki · Hangat & Dewasa",
+        defaultGeminiVoice = "Fenrir",
+        stylePrompt = "Suara laki-laki dewasa yang hangat, dalam, bijaksana, cocok untuk karakter senior atau narator cerita."
+    ),
+    CUSTOM_ONLY(
+        id = "CUSTOM_ONLY",
+        displayName = "Custom Persona",
+        genderLabel = "Kustom Bebas",
+        defaultGeminiVoice = "Kore",
+        stylePrompt = ""
+    );
+
+    companion object {
+        fun fromId(id: String?): VoicePersonality {
+            return entries.firstOrNull { it.id.equals(id, ignoreCase = true) }
+                ?: ANIME_FEMALE_GENTLE
+        }
+    }
+}
+
+enum class VoiceEmotion(
+    val id: String,
+    val displayName: String,
+    val styleDirective: String,
+    val offlinePitchDelta: Float,
+    val offlineRateDelta: Float
+) {
+    NEUTRAL("NEUTRAL", "Natural", "Intonasi alami dan seimbang.", 0f, 0f),
+    HAPPY("HAPPY", "Happy", "Nada gembira, cerah, dan tersenyum saat berbicara.", +0.06f, +0.05f),
+    SAD("SAD", "Sad", "Nada sedih, lirih, lembut, dan sedikit melambat penuh haru.", -0.06f, -0.08f),
+    ANGRY("ANGRY", "Angry", "Nada marah, tegas, intens, dan penekanan kuat.", +0.04f, +0.08f),
+    EXCITED("EXCITED", "Excited", "Sangat bersemangat, antusias, ekspresif, dan bertempo cepat.", +0.10f, +0.10f),
+    WHISPER("WHISPER", "Whisper", "Berbisik lembut, pelan, intim, dan penuh kehati-hatian.", -0.04f, -0.10f),
+    CALM("CALM", "Calm", "Tenang, santai, lembut, dan menenangkan.", -0.02f, -0.04f),
+    DRAMATIC("DRAMATIC", "Dramatic", "Dramatis, teatrikal, penuh penjiwaan dan jeda emosional.", 0f, -0.05f);
+
+    companion object {
+        fun fromId(id: String?): VoiceEmotion {
+            return entries.firstOrNull { it.id.equals(id, ignoreCase = true) } ?: NEUTRAL
+        }
+    }
 }
 
 data class RoiBox(
@@ -79,8 +186,12 @@ data class RoiLayoutConfig(
 data class CharacterProfile(
     val id: Long = 0L,
     val characterName: String,
-    val voiceProvider: String = AppConstants.PROVIDER_ANDROID_TTS,
-    val voiceId: String = "",
+    val voiceProvider: String = AppConstants.PROVIDER_GEMINI_TTS,
+    val voiceId: String = "Kore",
+    val offlineVoiceId: String = "",
+    val voicePersonality: VoicePersonality = VoicePersonality.ANIME_FEMALE_GENTLE,
+    val emotion: VoiceEmotion = VoiceEmotion.NEUTRAL,
+    val customVoiceDescription: String = "",
     val pitch: Float = 1.0f,
     val speechRate: Float = 1.0f,
     val volume: Float = 1.0f,
@@ -110,19 +221,27 @@ data class OverlayAppearanceConfig(
 )
 
 data class DubbingSettings(
-    val defaultProvider: VoiceProviderType = VoiceProviderType.ANDROID_TTS,
-    val defaultVoiceId: String = "",
+    val voiceOperatingMode: VoiceEngineOperatingMode = VoiceEngineOperatingMode.AUTOMATIC,
+    val defaultProvider: VoiceProviderType = VoiceProviderType.GEMINI_TTS,
+    val defaultVoiceId: String = "Kore",
+    val defaultPersonality: VoicePersonality = VoicePersonality.ANIME_FEMALE_GENTLE,
+    val defaultEmotion: VoiceEmotion = VoiceEmotion.NEUTRAL,
+    val defaultCustomVoiceDescription: String = "",
     val defaultPitch: Float = 1.0f,
     val defaultSpeechRate: Float = 1.0f,
     val defaultVolume: Float = 1.0f,
     val voiceEnabled: Boolean = true,
     val autoPlay: Boolean = true,
+    val enableAudioCache: Boolean = true,
     val audioQueuePolicy: AudioQueuePolicy = AudioQueuePolicy.REPLACE_CURRENT,
     val sourceLanguageCode: String = AppConstants.DEFAULT_SOURCE_LANGUAGE,
     val targetLanguageCode: String = AppConstants.DEFAULT_TARGET_LANGUAGE,
     val ocrIntervalMs: Long = AppConstants.DEFAULT_FRAME_INTERVAL_MS,
     val translationDelayMs: Long = AppConstants.DEFAULT_TRANSLATION_DELAY_MS,
     val ocrSensitivity: Float = AppConstants.DEFAULT_OCR_SENSITIVITY,
+    val geminiModelId: String = AppConstants.DEFAULT_GEMINI_TTS_MODEL,
+    val geminiEndpointUrl: String = "",
+    val geminiApiKey: String = "",
     val edgeEndpointUrl: String = "",
     val edgeBearerToken: String = ""
 )
@@ -166,6 +285,8 @@ data class DialogueEvent(
     val translatedText: String,
     val voiceIdUsed: String,
     val providerUsed: String,
+    val emotionUsed: String = VoiceEmotion.NEUTRAL.displayName,
+    val cacheHit: Boolean = false,
     val timestampMs: Long = System.currentTimeMillis()
 )
 
@@ -174,6 +295,10 @@ data class PipelineRuntimeState(
     val ocrStatus: OcrStatus = OcrStatus.IDLE,
     val translationModelState: TranslationModelState = TranslationModelState.Unknown,
     val voiceEngineStatus: VoiceEngineStatus = VoiceEngineStatus.INITIALIZING,
+    val voiceOperatingMode: VoiceEngineOperatingMode = VoiceEngineOperatingMode.AUTOMATIC,
+    val isNetworkOnline: Boolean = true,
+    val activeVoiceProviderLabel: String = "Siap",
+    val lastCacheHit: Boolean = false,
     val isOverlayRunning: Boolean = false,
     val isTranslationPaused: Boolean = false,
     val isTranslationVisible: Boolean = true,

@@ -11,6 +11,16 @@ object AppConstants {
 
     const val PROVIDER_ANDROID_TTS = "ANDROID_TTS"
     const val PROVIDER_EDGE_COMPATIBLE = "EDGE_COMPATIBLE"
+    const val PROVIDER_GEMINI_TTS = "GEMINI_TTS"
+
+    const val DEFAULT_GEMINI_TTS_MODEL = "gemini-3.8-flash-tts"
+    const val DEFAULT_GEMINI_LITE_TTS_MODEL = "gemini-3.8-flash-lite-tts"
+    const val DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com"
+
+    const val TTS_CACHE_DIR = "tts_audio_cache"
+    const val TTS_TEMP_DIR = "tts_temp"
+    const val TTS_CACHE_MAX_BYTES = 40L * 1024L * 1024L
+    const val GEMINI_HTTP_TIMEOUT_MS = 12_000L
 
     const val DEFAULT_SOURCE_LANGUAGE = "en"
     const val DEFAULT_TARGET_LANGUAGE = "id"

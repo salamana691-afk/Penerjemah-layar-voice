@@ -2,7 +2,10 @@ package com.autodub.edge.domain.usecase
 
 import android.graphics.Bitmap
 import com.autodub.edge.core.constants.AppConstants
+import com.autodub.edge.core.network.ConnectivityObserver
+import com.autodub.edge.core.util.AppError
 import com.autodub.edge.core.util.AppResult
+import com.autodub.edge.core.util.TextNormalizer
 import com.autodub.edge.data.preferences.PreferencesRepository
 import com.autodub.edge.data.repository.CharacterRepository
 import com.autodub.edge.domain.model.CaptureStatus
@@ -14,7 +17,7 @@ import com.autodub.edge.domain.model.OverlayAppearanceConfig
 import com.autodub.edge.domain.model.PipelineRuntimeState
 import com.autodub.edge.domain.model.RoiLayoutConfig
 import com.autodub.edge.domain.model.RoiMode
-import com.autodub.edge.domain.model.TranslationModelState
+import com.autodub.edge.domain.model.VoiceEngineOperatingMode
 import com.autodub.edge.domain.model.VoiceEngineStatus
 import com.autodub.edge.engine.audio.AudioPlaybackManager
 import com.autodub.edge.engine.audio.QueuedAudioTrack
@@ -42,6 +45,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class PipelineCoordinator(
     private val characterRepository: CharacterRepository,
     private val preferencesRepository: PreferencesRepository,
+    private val connectivityObserver: ConnectivityObserver,
     private val ocrProcessor: DualBoxOcrProcessor,
     private val translationRepository: TranslationRepository,
     private val voiceOrchestrator: VoiceOrchestrator,
@@ -86,6 +90,20 @@ class PipelineCoordinator(
         }
 
         scope.launch {
+            connectivityObserver.isOnline.collectLatest { online ->
+                _runtimeState.update { state ->
+                    state.copy(
+                        isNetworkOnline = online,
+                        activeVoiceProviderLabel = computeProviderStatusLabel(
+                            online = online,
+                            settings = dubbingSettingsState.value
+                        )
+                    )
+                }
+            }
+        }
+
+        scope.launch {
             translationRepository.modelState.collectLatest { modelState ->
                 _runtimeState.update { it.copy(translationModelState = modelState) }
             }
@@ -105,7 +123,16 @@ class PipelineCoordinator(
 
         scope.launch {
             dubbingSettingsState.collectLatest { settings ->
-                _runtimeState.update { it.copy(isVoiceEnabled = settings.voiceEnabled) }
+                _runtimeState.update {
+                    it.copy(
+                        isVoiceEnabled = settings.voiceEnabled,
+                        voiceOperatingMode = settings.voiceOperatingMode,
+                        activeVoiceProviderLabel = computeProviderStatusLabel(
+                            online = connectivityObserver.isOnline.value,
+                            settings = settings
+                        )
+                    )
+                }
             }
         }
 
@@ -123,6 +150,19 @@ class PipelineCoordinator(
                     )
                 }
             }
+        }
+    }
+
+    private fun computeProviderStatusLabel(online: Boolean, settings: DubbingSettings): String {
+        return when (settings.voiceOperatingMode) {
+            VoiceEngineOperatingMode.AUTOMATIC -> {
+                if (online && settings.defaultProvider.isOnlineProvider) {
+                    "Auto · Online (${settings.defaultProvider.id})"
+                } else {
+                    "Auto · Offline Fallback (Android TTS)"
+                }
+            }
+            VoiceEngineOperatingMode.MANUAL -> "Manual · ${settings.defaultProvider.id}"
         }
     }
 
@@ -203,10 +243,6 @@ class PipelineCoordinator(
         )
     }
 
-    /**
-     * Entry point called by ScreenCaptureService for each throttled frame.
-     * Drops overlapping frames cleanly to protect CPU & RAM on mid-range devices.
-     */
     suspend fun processScreenBitmap(bitmap: Bitmap) {
         val state = _runtimeState.value
         if (state.isTranslationPaused || state.captureStatus != CaptureStatus.RUNNING) {
@@ -230,8 +266,7 @@ class PipelineCoordinator(
 
             when (ocrResult) {
                 is AppResult.Error -> {
-                    // DialogNotFound is normal on transitions/menus; only surface critical OCR errors
-                    if (ocrResult.error !is com.autodub.edge.core.util.AppError.DialogNotFound) {
+                    if (ocrResult.error !is AppError.DialogNotFound) {
                         _runtimeState.update { it.copy(lastErrorMessage = ocrResult.error.userMessage) }
                     }
                     return
@@ -252,7 +287,6 @@ class PipelineCoordinator(
                         return
                     }
 
-                    // Cancel previous in-flight translation/TTS if a genuinely new line appeared
                     activeDubbingJob?.cancel()
                     activeDubbingJob = scope.launch {
                         handleNewDialogue(
@@ -280,6 +314,7 @@ class PipelineCoordinator(
                 delay(settings.translationDelayMs)
             }
 
+            // Offline ML Kit Translation always runs independently of voice internet availability
             val translationResult = translationRepository.translate(
                 text = sourceText,
                 sourceCode = settings.sourceLanguageCode,
@@ -313,17 +348,30 @@ class PipelineCoordinator(
             val shouldDub = settings.voiceEnabled && settings.autoPlay && profile.enabled
             var providerUsed = profile.voiceProvider
             var voiceUsed = profile.voiceId
+            var cacheHit = false
 
             if (shouldDub) {
                 val effectiveVoiceId = profile.voiceId.ifBlank { settings.defaultVoiceId }
-                val effectiveProvider = profile.voiceProvider.ifBlank { settings.defaultProvider.id }
+                val effectiveProvider = if (settings.voiceOperatingMode == VoiceEngineOperatingMode.MANUAL) {
+                    settings.defaultProvider.id
+                } else {
+                    profile.voiceProvider.ifBlank { settings.defaultProvider.id }
+                }
                 voiceUsed = effectiveVoiceId
 
                 val synthResult = voiceOrchestrator.synthesize(
                     preferredProvider = effectiveProvider,
+                    operatingMode = settings.voiceOperatingMode,
+                    enableCache = settings.enableAudioCache,
                     request = VoiceSynthesisRequest(
                         text = translatedText,
                         voiceId = effectiveVoiceId,
+                        offlineVoiceId = profile.offlineVoiceId,
+                        personality = profile.voicePersonality,
+                        emotion = profile.emotion,
+                        customVoiceDescription = profile.customVoiceDescription.ifBlank {
+                            settings.defaultCustomVoiceDescription
+                        },
                         pitch = profile.pitch,
                         speechRate = profile.speechRate,
                         volume = profile.volume,
@@ -335,13 +383,20 @@ class PipelineCoordinator(
                 when (synthResult) {
                     is AppResult.Success -> {
                         providerUsed = synthResult.data.providerUsed
+                        cacheHit = synthResult.data.fromCache
                         _runtimeState.update {
                             it.copy(
                                 voiceEngineStatus = if (synthResult.data.usedFallback) {
                                     VoiceEngineStatus.FALLBACK_ACTIVE
                                 } else {
                                     VoiceEngineStatus.SPEAKING
-                                }
+                                },
+                                activeVoiceProviderLabel = buildString {
+                                    append(providerUsed)
+                                    if (synthResult.data.usedFallback) append(" (Fallback)")
+                                    if (cacheHit) append(" · Cache")
+                                },
+                                lastCacheHit = cacheHit
                             )
                         }
                         audioPlaybackManager.enqueue(
@@ -350,7 +405,7 @@ class PipelineCoordinator(
                                 file = synthResult.data.audioFile,
                                 speakerName = speakerDisplay,
                                 volume = (profile.volume * settings.defaultVolume).coerceIn(0f, 1f),
-                                speed = 1.0f // Pitch & rate already applied during TTS synthesis
+                                speed = 1.0f
                             ),
                             policy = settings.audioQueuePolicy
                         )
@@ -373,7 +428,9 @@ class PipelineCoordinator(
                 sourceText = sourceText,
                 translatedText = translatedText,
                 voiceIdUsed = voiceUsed.ifBlank { "System Default" },
-                providerUsed = providerUsed
+                providerUsed = providerUsed,
+                emotionUsed = profile.emotion.displayName,
+                cacheHit = cacheHit
             )
             _recentDialogues.update { list -> (listOf(event) + list).take(25) }
         } catch (ce: CancellationException) {
@@ -387,13 +444,25 @@ class PipelineCoordinator(
 
     suspend fun testCharacterVoice(profile: CharacterProfile, sampleText: String): AppResult<Unit> {
         val settings = dubbingSettingsState.value
-        val provider = profile.voiceProvider.ifBlank { settings.defaultProvider.id }
+        val provider = if (settings.voiceOperatingMode == VoiceEngineOperatingMode.MANUAL) {
+            settings.defaultProvider.id
+        } else {
+            profile.voiceProvider.ifBlank { settings.defaultProvider.id }
+        }
         val voiceId = profile.voiceId.ifBlank { settings.defaultVoiceId }
         val result = voiceOrchestrator.synthesize(
             preferredProvider = provider,
+            operatingMode = settings.voiceOperatingMode,
+            enableCache = settings.enableAudioCache,
             request = VoiceSynthesisRequest(
                 text = sampleText,
                 voiceId = voiceId,
+                offlineVoiceId = profile.offlineVoiceId,
+                personality = profile.voicePersonality,
+                emotion = profile.emotion,
+                customVoiceDescription = profile.customVoiceDescription.ifBlank {
+                    settings.defaultCustomVoiceDescription
+                },
                 pitch = profile.pitch,
                 speechRate = profile.speechRate,
                 volume = profile.volume,
@@ -403,11 +472,21 @@ class PipelineCoordinator(
         )
         return when (result) {
             is AppResult.Success -> {
+                _runtimeState.update {
+                    it.copy(
+                        activeVoiceProviderLabel = if (result.data.usedFallback) {
+                            "${result.data.providerUsed} (Fallback)"
+                        } else {
+                            result.data.providerUsed
+                        },
+                        lastCacheHit = result.data.fromCache
+                    )
+                }
                 audioPlaybackManager.enqueue(
                     track = QueuedAudioTrack(
                         id = UUID.randomUUID().toString(),
                         file = result.data.audioFile,
-                        speakerName = TextNormalizerOrDefault(profile.characterName),
+                        speakerName = formatSpeaker(profile.characterName),
                         volume = profile.volume,
                         speed = 1.0f
                     ),
@@ -420,11 +499,11 @@ class PipelineCoordinator(
         }
     }
 
-    private fun TextNormalizerOrDefault(name: String): String {
+    private fun formatSpeaker(name: String): String {
         return if (name == AppConstants.DEFAULT_NARRATOR_NAME) {
             AppConstants.DEFAULT_NARRATOR_DISPLAY
         } else {
-            com.autodub.edge.core.util.TextNormalizer.toDisplayName(name)
+            TextNormalizer.toDisplayName(name)
         }
     }
 
@@ -445,6 +524,7 @@ class PipelineCoordinator(
 
     fun release() {
         activeDubbingJob?.cancel()
+        connectivityObserver.release()
         ocrProcessor.close()
         translationRepository.close()
         voiceOrchestrator.release()

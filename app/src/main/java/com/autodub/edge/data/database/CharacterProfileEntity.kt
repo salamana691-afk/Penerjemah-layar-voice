@@ -6,6 +6,8 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.autodub.edge.core.constants.AppConstants
 import com.autodub.edge.domain.model.CharacterProfile
+import com.autodub.edge.domain.model.VoiceEmotion
+import com.autodub.edge.domain.model.VoicePersonality
 
 @Entity(
     tableName = "character_profiles",
@@ -25,6 +27,18 @@ data class CharacterProfileEntity(
 
     @ColumnInfo(name = "voice_id")
     val voiceId: String,
+
+    @ColumnInfo(name = "offline_voice_id", defaultValue = "")
+    val offlineVoiceId: String = "",
+
+    @ColumnInfo(name = "voice_personality", defaultValue = "ANIME_FEMALE_GENTLE")
+    val voicePersonality: String = VoicePersonality.ANIME_FEMALE_GENTLE.id,
+
+    @ColumnInfo(name = "emotion", defaultValue = "NEUTRAL")
+    val emotion: String = VoiceEmotion.NEUTRAL.id,
+
+    @ColumnInfo(name = "custom_voice_description", defaultValue = "")
+    val customVoiceDescription: String = "",
 
     @ColumnInfo(name = "pitch")
     val pitch: Float,
@@ -52,6 +66,10 @@ data class CharacterProfileEntity(
         characterName = characterName,
         voiceProvider = voiceProvider,
         voiceId = voiceId,
+        offlineVoiceId = offlineVoiceId,
+        voicePersonality = VoicePersonality.fromId(voicePersonality),
+        emotion = VoiceEmotion.fromId(emotion),
+        customVoiceDescription = customVoiceDescription,
         pitch = pitch,
         speechRate = speechRate,
         volume = volume,
@@ -67,6 +85,10 @@ data class CharacterProfileEntity(
             characterName = profile.characterName,
             voiceProvider = profile.voiceProvider,
             voiceId = profile.voiceId,
+            offlineVoiceId = profile.offlineVoiceId,
+            voicePersonality = profile.voicePersonality.id,
+            emotion = profile.emotion.id,
+            customVoiceDescription = profile.customVoiceDescription,
             pitch = profile.pitch,
             speechRate = profile.speechRate,
             volume = profile.volume,
@@ -79,8 +101,12 @@ data class CharacterProfileEntity(
         fun defaultNarrator(now: Long = System.currentTimeMillis()): CharacterProfileEntity =
             CharacterProfileEntity(
                 characterName = AppConstants.DEFAULT_NARRATOR_NAME,
-                voiceProvider = AppConstants.PROVIDER_ANDROID_TTS,
-                voiceId = "",
+                voiceProvider = AppConstants.PROVIDER_GEMINI_TTS,
+                voiceId = "Charon",
+                offlineVoiceId = "",
+                voicePersonality = VoicePersonality.ANIME_MALE_CALM.id,
+                emotion = VoiceEmotion.NEUTRAL.id,
+                customVoiceDescription = "Suara narator dewasa yang tenang, jernih, netral, dan mudah dipahami.",
                 pitch = 1.0f,
                 speechRate = 1.0f,
                 volume = 1.0f,

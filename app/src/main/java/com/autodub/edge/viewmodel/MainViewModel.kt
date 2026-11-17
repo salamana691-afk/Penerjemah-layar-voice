@@ -37,17 +37,31 @@ class MainViewModel(
     private val _availableVoices = MutableStateFlow<List<VoiceDescriptor>>(emptyList())
     val availableVoices: StateFlow<List<VoiceDescriptor>> = _availableVoices.asStateFlow()
 
+    private val _cacheSizeBytes = MutableStateFlow(0L)
+    val cacheSizeBytes: StateFlow<Long> = _cacheSizeBytes.asStateFlow()
+
     private val _feedbackMessage = MutableStateFlow<String?>(null)
     val feedbackMessage: StateFlow<String?> = _feedbackMessage.asStateFlow()
 
     init {
         loadVoicesForProvider(dubbingSettingsState.value.defaultProvider.id)
+        refreshCacheSize()
     }
 
     fun loadVoicesForProvider(providerId: String) {
         viewModelScope.launch {
             _availableVoices.value = voiceOrchestrator.getVoicesForProvider(providerId)
         }
+    }
+
+    fun refreshCacheSize() {
+        _cacheSizeBytes.value = voiceOrchestrator.getCacheSizeBytes()
+    }
+
+    fun clearAudioCache() {
+        voiceOrchestrator.clearAudioCache()
+        refreshCacheSize()
+        _feedbackMessage.value = "Cache audio TTS dibersihkan."
     }
 
     fun saveRoiLayout(config: RoiLayoutConfig) {
@@ -101,6 +115,9 @@ class MainViewModel(
             characterName = AppConstants.DEFAULT_NARRATOR_NAME,
             voiceProvider = settings.defaultProvider.id,
             voiceId = settings.defaultVoiceId,
+            voicePersonality = settings.defaultPersonality,
+            emotion = settings.defaultEmotion,
+            customVoiceDescription = settings.defaultCustomVoiceDescription,
             pitch = settings.defaultPitch,
             speechRate = settings.defaultSpeechRate,
             volume = settings.defaultVolume,
@@ -109,9 +126,12 @@ class MainViewModel(
         viewModelScope.launch {
             when (val res = coordinator.testCharacterVoice(
                 sampleProfile,
-                "Halo, ini adalah uji coba suara AutoDub Edge dalam bahasa Indonesia."
+                "Halo, ini adalah uji coba suara ekspresif AutoDub Edge dalam bahasa Indonesia."
             )) {
-                is AppResult.Success -> _feedbackMessage.value = "Memutar pratinjau suara..."
+                is AppResult.Success -> {
+                    refreshCacheSize()
+                    _feedbackMessage.value = "Memutar pratinjau suara..."
+                }
                 is AppResult.Error -> _feedbackMessage.value = res.error.userMessage
                 AppResult.Loading -> Unit
             }

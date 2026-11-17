@@ -39,41 +39,20 @@ class AndroidNativeVoiceEngine(
     private val pendingUtterances = ConcurrentHashMap<String, CompletableDeferred<AppResult<File>>>()
     private val utteranceFiles = ConcurrentHashMap<String, File>()
 
-    private suspend fun tryInitEngine(enginePackage: String?): Boolean {
-        val deferred = CompletableDeferred<Boolean>()
-        val created = withContext(Dispatchers.Main) {
-            runCatching { tts?.shutdown() }
-            tts = null
-            try {
-                tts = if (enginePackage != null) {
-                    TextToSpeech(context.applicationContext, { status ->
-                        deferred.complete(status == TextToSpeech.SUCCESS)
-                    }, enginePackage)
-                } else {
-                    TextToSpeech(context.applicationContext) { status ->
-                        deferred.complete(status == TextToSpeech.SUCCESS)
-                    }
-                }
-                true
-            } catch (_: Throwable) {
-                false
-            }
-        }
-        if (!created) return false
-        return withTimeoutOrNull(6000L) { deferred.await() } ?: false
-    }
-
     override suspend fun initialize(): AppResult<Unit> = initMutex.withLock {
         if (isInitialized && tts != null) {
             return AppResult.Success(Unit)
         }
 
-        // Coba engine TTS default sistem dulu; kalau kena SecurityException / gagal, fallback ke Google TTS
-        var ok = tryInitEngine(null)
-        if (!ok) {
-            ok = tryInitEngine("com.google.android.tts")
+        val deferred = CompletableDeferred<Boolean>()
+        withContext(Dispatchers.Main) {
+            tts?.shutdown()
+            tts = TextToSpeech(context.applicationContext) { status ->
+                deferred.complete(status == TextToSpeech.SUCCESS)
+            }
         }
 
+        val ok = withTimeoutOrNull(6000L) { deferred.await() } ?: false
         if (!ok) {
             isInitialized = false
             return AppResult.Error(
@@ -124,9 +103,9 @@ class AndroidNativeVoiceEngine(
         })
 
         val indonesianLocale = Locale("id", "ID")
-        val langResult = runCatching { engine.setLanguage(indonesianLocale) }.getOrDefault(TextToSpeech.LANG_NOT_SUPPORTED)
+        val langResult = engine.setLanguage(indonesianLocale)
         if (langResult == TextToSpeech.LANG_MISSING_DATA || langResult == TextToSpeech.LANG_NOT_SUPPORTED) {
-            runCatching { engine.setLanguage(Locale.getDefault()) }
+            engine.setLanguage(Locale.getDefault())
         }
 
         isInitialized = true
@@ -176,12 +155,18 @@ class AndroidNativeVoiceEngine(
             AppError.TtsProviderFailed("Android TTS belum siap.")
         )
 
+        val effectivePitch = VoicePromptBuilder.computeOfflinePitch(request.pitch, request.emotion)
+        val effectiveRate = VoicePromptBuilder.computeOfflineRate(request.speechRate, request.emotion)
+
+        // Prefer explicit offlineVoiceId for character preservation when falling back from online AI
+        val targetVoiceId = request.offlineVoiceId.trim().ifEmpty { request.voiceId.trim() }
+
         val plainParams = SSMLGenerator.toPlainSpeechParams(
             request.text,
             SsmlConfig(
-                voiceId = request.voiceId,
-                pitchMultiplier = request.pitch,
-                rateMultiplier = request.speechRate,
+                voiceId = targetVoiceId,
+                pitchMultiplier = effectivePitch,
+                rateMultiplier = effectiveRate,
                 languageTag = request.languageTag
             )
         )
@@ -191,23 +176,32 @@ class AndroidNativeVoiceEngine(
 
         outputFile.parentFile?.mkdirs()
 
-        if (plainParams.voiceId.isNotEmpty()) {
-            val matchedVoice = runCatching { engine.voices }
-                .getOrNull()
-                ?.firstOrNull { it.name == plainParams.voiceId }
-            if (matchedVoice != null) {
-                runCatching { engine.voice = matchedVoice }
-            }
+        val allVoices = runCatching { engine.voices }.getOrNull().orEmpty()
+        val matchedVoice = if (plainParams.voiceId.isNotEmpty()) {
+            allVoices.firstOrNull { it.name == plainParams.voiceId }
+        } else {
+            null
+        }
+
+        if (matchedVoice != null) {
+            engine.voice = matchedVoice
         } else {
             val idLocale = Locale("id", "ID")
-            val avail = runCatching { engine.isLanguageAvailable(idLocale) }.getOrDefault(TextToSpeech.LANG_NOT_SUPPORTED)
+            val avail = engine.isLanguageAvailable(idLocale)
             if (avail >= TextToSpeech.LANG_AVAILABLE) {
-                runCatching { engine.language = idLocale }
+                engine.language = idLocale
+            }
+            // If offline voice is unavailable, try matching an offline Indonesian voice safely
+            val localIdVoice = allVoices.firstOrNull {
+                it.locale.language.equals("id", ignoreCase = true) && !it.isNetworkConnectionRequired
+            }
+            if (localIdVoice != null) {
+                engine.voice = localIdVoice
             }
         }
 
-        runCatching { engine.setPitch(plainParams.pitch) }
-        runCatching { engine.setSpeechRate(plainParams.rate) }
+        engine.setPitch(plainParams.pitch)
+        engine.setSpeechRate(plainParams.rate)
 
         val utteranceId = UUID.randomUUID().toString()
         val deferred = CompletableDeferred<AppResult<File>>()
@@ -218,10 +212,7 @@ class AndroidNativeVoiceEngine(
             putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, request.volume.coerceIn(0f, 1f))
         }
 
-        val queueStatus = runCatching {
-            engine.synthesizeToFile(plainParams.text, params, outputFile, utteranceId)
-        }.getOrDefault(TextToSpeech.ERROR)
-
+        val queueStatus = engine.synthesizeToFile(plainParams.text, params, outputFile, utteranceId)
         if (queueStatus != TextToSpeech.SUCCESS) {
             pendingUtterances.remove(utteranceId)
             utteranceFiles.remove(utteranceId)
@@ -243,8 +234,8 @@ class AndroidNativeVoiceEngine(
         pendingUtterances.values.forEach { it.cancel() }
         pendingUtterances.clear()
         utteranceFiles.clear()
-        runCatching { tts?.stop() }
-        runCatching { tts?.shutdown() }
+        tts?.stop()
+        tts?.shutdown()
         tts = null
         isInitialized = false
     }

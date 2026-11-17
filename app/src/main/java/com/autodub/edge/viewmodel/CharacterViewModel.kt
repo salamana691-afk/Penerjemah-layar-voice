@@ -11,6 +11,7 @@ import com.autodub.edge.domain.usecase.PipelineCoordinator
 import com.autodub.edge.engine.voice.SSMLGenerator
 import com.autodub.edge.engine.voice.SsmlConfig
 import com.autodub.edge.engine.voice.VoiceOrchestrator
+import com.autodub.edge.engine.voice.VoicePromptBuilder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -30,16 +31,26 @@ class CharacterViewModel(
     private val _providerVoices = MutableStateFlow<List<VoiceDescriptor>>(emptyList())
     val providerVoices: StateFlow<List<VoiceDescriptor>> = _providerVoices.asStateFlow()
 
+    private val _offlineVoices = MutableStateFlow<List<VoiceDescriptor>>(emptyList())
+    val offlineVoices: StateFlow<List<VoiceDescriptor>> = _offlineVoices.asStateFlow()
+
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
 
     init {
-        loadVoices(AppConstants.PROVIDER_ANDROID_TTS)
+        loadVoices(AppConstants.PROVIDER_GEMINI_TTS)
+        loadOfflineVoices()
     }
 
     fun loadVoices(providerId: String) {
         viewModelScope.launch {
             _providerVoices.value = voiceOrchestrator.getVoicesForProvider(providerId)
+        }
+    }
+
+    fun loadOfflineVoices() {
+        viewModelScope.launch {
+            _offlineVoices.value = voiceOrchestrator.getVoicesForProvider(AppConstants.PROVIDER_ANDROID_TTS)
         }
     }
 
@@ -73,10 +84,10 @@ class CharacterViewModel(
 
     fun testVoice(profile: CharacterProfile) {
         viewModelScope.launch {
-            val sample = "Halo, saya ${profile.characterName}. Ini adalah suara dubbing karakter saya."
+            val sample = "Halo, aku ${profile.characterName}. Senang sekali bisa berbicara denganmu hari ini."
             when (val res = coordinator.testCharacterVoice(profile, sample)) {
                 is AppResult.Success -> {
-                    _statusMessage.value = "Memutar suara ${profile.characterName}..."
+                    _statusMessage.value = "Memutar suara ${profile.characterName} (${profile.emotion.displayName})..."
                 }
                 is AppResult.Error -> {
                     _statusMessage.value = res.error.userMessage
@@ -96,6 +107,16 @@ class CharacterViewModel(
                 languageTag = "id-ID",
                 style = profile.customSsmlStyle
             )
+        )
+    }
+
+    fun buildVoicePromptPreview(profile: CharacterProfile): String {
+        return VoicePromptBuilder.buildStylePrompt(
+            personality = profile.voicePersonality,
+            emotion = profile.emotion,
+            customDescription = profile.customVoiceDescription,
+            pitch = profile.pitch,
+            speechRate = profile.speechRate
         )
     }
 

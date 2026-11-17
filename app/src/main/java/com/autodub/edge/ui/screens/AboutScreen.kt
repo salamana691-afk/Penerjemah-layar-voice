@@ -60,7 +60,7 @@ fun AboutScreen() {
 
         CyberCard {
             Text(
-                text = "Arsitektur Pipeline",
+                text = "Arsitektur Dual Voice & Pipeline",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = CyberColors.TextPrimary
@@ -70,7 +70,7 @@ fun AboutScreen() {
                     "2. Dual-Box ROI cropping & ML Kit Text Recognition (Nama Karakter + Dialog).\n" +
                     "3. Duplicate detection + Fuzzy Character Matching dengan database Room.\n" +
                     "4. Offline EN → ID Translation melalui Google ML Kit Translation.\n" +
-                    "5. Multi-Character AI Voice Dubbing melalui SSMLGenerator, VoiceEngine modular, dan Media3 ExoPlayer.",
+                    "5. Dual Voice Engine: Gemini Expressive AI TTS (Voice Design, Persona Anime, 8 Emosi, Cache Disk) saat online + Fallback otomatis ke Android Native TTS saat offline tanpa menghentikan OCR dan terjemahan.",
                 fontSize = 13.sp,
                 lineHeight = 20.sp,
                 color = CyberColors.TextSecondary
@@ -79,14 +79,15 @@ fun AboutScreen() {
 
         CyberCard {
             Text(
-                text = "Developer & Privasi",
+                text = "Kebutuhan API Key, Kuota & Biaya Provider",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = CyberColors.TextPrimary
             )
             Text(
-                text = "Dikembangkan oleh AutoDub Edge Engineering Team (com.autodub.edge). " +
-                    "Semua frame tangkapan layar diproses langsung di memori perangkat untuk OCR tanpa disimpan ke penyimpanan permanen.",
+                text = "• Gemini TTS (gemini-3.8-flash-tts / gemini-3.8-flash-lite-tts): Memerlukan API key resmi dari Google AI Studio atau URL proxy backend Anda yang dikonfigurasi saat runtime (tidak ada API key hardcoded di APK).\n" +
+                    "• Kuota & Biaya: Free tier Google AI Studio menyediakan kuota gratis terbatas (RPM/RPD); untuk pemakaian intensif / game panjang tanpa batas kuota rendah, gunakan tier berbayar (Pay-as-you-go sesuai tarif token/audio Gemini API).\n" +
+                    "• Android Native TTS & ML Kit Offline: Gratis 100%, berjalan penuh di perangkat tanpa kuota dan tanpa koneksi internet.",
                 fontSize = 13.sp,
                 lineHeight = 20.sp,
                 color = CyberColors.TextSecondary

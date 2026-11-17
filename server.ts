@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import JSZip from 'jszip';
+import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -96,8 +97,22 @@ function loadAndroidProjectFiles(): AndroidProjectFile[] {
   return files.sort((a, b) => a.path.localeCompare(b.path));
 }
 
+function getGeminiClient(): GoogleGenAI | null {
+  const key = process.env.GEMINI_API_KEY?.trim();
+  if (!key) return null;
+  return new GoogleGenAI({
+    apiKey: key,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
+}
+
 async function startServer() {
   const app = express();
+  app.use(express.json({ limit: '1mb' }));
   const port = 3000;
 
   app.get('/api/android-files', (_req, res) => {
@@ -137,6 +152,92 @@ async function startServer() {
       res.status(500).json({
         error: error instanceof Error ? error.message : 'Failed to build ZIP archive',
       });
+    }
+  });
+
+  app.post('/api/gemini-tts', async (req, res) => {
+    const ai = getGeminiClient();
+    if (!ai) {
+      res.status(503).json({
+        error: 'GEMINI_API_KEY belum dikonfigurasi di server. Sistem otomatis memakai fallback offline.',
+      });
+      return;
+    }
+
+    const { text, stylePrompt, voiceName, model } = req.body as {
+      text?: string;
+      stylePrompt?: string;
+      voiceName?: string;
+      model?: string;
+    };
+
+    const cleanText = text?.trim() ?? '';
+    if (!cleanText) {
+      res.status(400).json({ error: 'Teks dialog tidak boleh kosong.' });
+      return;
+    }
+
+    const targetModel =
+      model === 'gemini-3.8-flash-lite-tts' ? 'gemini-3.8-flash-lite-tts' : 'gemini-3.8-flash-tts';
+    const targetVoice = voiceName?.trim() || 'Kore';
+
+    try {
+      const response = await ai.models.generateContent({
+        model: targetModel,
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: cleanText,
+                ...(stylePrompt?.trim()
+                  ? {
+                      speechMetadata: {
+                        style: stylePrompt.trim(),
+                      },
+                    }
+                  : {}),
+              },
+            ],
+          },
+        ],
+        config: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: targetVoice,
+              },
+            },
+          },
+        },
+      });
+
+      const parts = response.candidates?.[0]?.content?.parts ?? [];
+      let audioBase64: string | undefined;
+      for (const p of parts) {
+        if (p.inlineData?.data) {
+          audioBase64 = p.inlineData.data;
+          break;
+        }
+      }
+
+      if (!audioBase64) {
+        res.status(502).json({
+          error: 'Gemini TTS tidak mengembalikan data audio WAV.',
+        });
+        return;
+      }
+
+      res.json({
+        audioBase64,
+        mimeType: 'audio/wav',
+        model: targetModel,
+        voiceName: targetVoice,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Gagal menghubungi Gemini TTS API.';
+      res.status(502).json({ error: message });
     }
   });
 

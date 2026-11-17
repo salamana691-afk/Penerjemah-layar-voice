@@ -18,6 +18,9 @@ import com.autodub.edge.domain.model.OverlayAppearanceConfig
 import com.autodub.edge.domain.model.RoiBox
 import com.autodub.edge.domain.model.RoiLayoutConfig
 import com.autodub.edge.domain.model.RoiMode
+import com.autodub.edge.domain.model.VoiceEmotion
+import com.autodub.edge.domain.model.VoiceEngineOperatingMode
+import com.autodub.edge.domain.model.VoicePersonality
 import com.autodub.edge.domain.model.VoiceProviderType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -56,19 +59,27 @@ class PreferencesRepository(private val context: Context) {
         val OVERLAY_SHOW_ORIGINAL = booleanPreferencesKey("overlay_show_original")
         val OVERLAY_VISIBLE = booleanPreferencesKey("overlay_visible")
 
+        val VOICE_OPERATING_MODE = stringPreferencesKey("voice_operating_mode")
         val VOICE_PROVIDER = stringPreferencesKey("voice_provider")
         val VOICE_ID = stringPreferencesKey("voice_id")
+        val VOICE_PERSONALITY = stringPreferencesKey("voice_personality")
+        val VOICE_EMOTION = stringPreferencesKey("voice_emotion")
+        val VOICE_CUSTOM_DESC = stringPreferencesKey("voice_custom_desc")
         val VOICE_PITCH = floatPreferencesKey("voice_pitch")
         val VOICE_RATE = floatPreferencesKey("voice_rate")
         val VOICE_VOLUME = floatPreferencesKey("voice_volume")
         val VOICE_ENABLED = booleanPreferencesKey("voice_enabled")
         val AUTO_PLAY = booleanPreferencesKey("auto_play")
+        val ENABLE_AUDIO_CACHE = booleanPreferencesKey("enable_audio_cache")
         val QUEUE_POLICY = stringPreferencesKey("queue_policy")
         val SOURCE_LANG = stringPreferencesKey("source_lang")
         val TARGET_LANG = stringPreferencesKey("target_lang")
         val OCR_INTERVAL_MS = longPreferencesKey("ocr_interval_ms")
         val TRANSLATION_DELAY_MS = longPreferencesKey("translation_delay_ms")
         val OCR_SENSITIVITY = floatPreferencesKey("ocr_sensitivity")
+        val GEMINI_MODEL_ID = stringPreferencesKey("gemini_model_id")
+        val GEMINI_ENDPOINT_URL = stringPreferencesKey("gemini_endpoint_url")
+        val GEMINI_API_KEY = stringPreferencesKey("gemini_api_key")
         val EDGE_ENDPOINT_URL = stringPreferencesKey("edge_endpoint_url")
         val EDGE_BEARER_TOKEN = stringPreferencesKey("edge_bearer_token")
     }
@@ -122,28 +133,40 @@ class PreferencesRepository(private val context: Context) {
     }
 
     val dubbingSettingsFlow: Flow<DubbingSettings> = safeData.map { prefs ->
-        val providerStr = prefs[Keys.VOICE_PROVIDER] ?: AppConstants.PROVIDER_ANDROID_TTS
+        val modeStr = prefs[Keys.VOICE_OPERATING_MODE] ?: VoiceEngineOperatingMode.AUTOMATIC.name
+        val operatingMode = runCatching { VoiceEngineOperatingMode.valueOf(modeStr) }
+            .getOrDefault(VoiceEngineOperatingMode.AUTOMATIC)
+
+        val providerStr = prefs[Keys.VOICE_PROVIDER] ?: AppConstants.PROVIDER_GEMINI_TTS
         val provider = VoiceProviderType.entries.firstOrNull { it.id == providerStr }
-            ?: VoiceProviderType.ANDROID_TTS
+            ?: VoiceProviderType.GEMINI_TTS
 
         val policyStr = prefs[Keys.QUEUE_POLICY] ?: AudioQueuePolicy.REPLACE_CURRENT.name
         val policy = runCatching { AudioQueuePolicy.valueOf(policyStr) }
             .getOrDefault(AudioQueuePolicy.REPLACE_CURRENT)
 
         DubbingSettings(
+            voiceOperatingMode = operatingMode,
             defaultProvider = provider,
-            defaultVoiceId = prefs[Keys.VOICE_ID] ?: "",
+            defaultVoiceId = prefs[Keys.VOICE_ID] ?: "Kore",
+            defaultPersonality = VoicePersonality.fromId(prefs[Keys.VOICE_PERSONALITY]),
+            defaultEmotion = VoiceEmotion.fromId(prefs[Keys.VOICE_EMOTION]),
+            defaultCustomVoiceDescription = prefs[Keys.VOICE_CUSTOM_DESC] ?: "",
             defaultPitch = (prefs[Keys.VOICE_PITCH] ?: 1.0f).coerceIn(0.5f, 2.0f),
             defaultSpeechRate = (prefs[Keys.VOICE_RATE] ?: 1.0f).coerceIn(0.5f, 2.0f),
             defaultVolume = (prefs[Keys.VOICE_VOLUME] ?: 1.0f).coerceIn(0.0f, 1.0f),
             voiceEnabled = prefs[Keys.VOICE_ENABLED] ?: true,
             autoPlay = prefs[Keys.AUTO_PLAY] ?: true,
+            enableAudioCache = prefs[Keys.ENABLE_AUDIO_CACHE] ?: true,
             audioQueuePolicy = policy,
             sourceLanguageCode = prefs[Keys.SOURCE_LANG] ?: AppConstants.DEFAULT_SOURCE_LANGUAGE,
             targetLanguageCode = prefs[Keys.TARGET_LANG] ?: AppConstants.DEFAULT_TARGET_LANGUAGE,
             ocrIntervalMs = (prefs[Keys.OCR_INTERVAL_MS] ?: AppConstants.DEFAULT_FRAME_INTERVAL_MS).coerceIn(250L, 3000L),
             translationDelayMs = (prefs[Keys.TRANSLATION_DELAY_MS] ?: AppConstants.DEFAULT_TRANSLATION_DELAY_MS).coerceIn(0L, 1500L),
             ocrSensitivity = (prefs[Keys.OCR_SENSITIVITY] ?: AppConstants.DEFAULT_OCR_SENSITIVITY).coerceIn(0.4f, 0.98f),
+            geminiModelId = prefs[Keys.GEMINI_MODEL_ID] ?: AppConstants.DEFAULT_GEMINI_TTS_MODEL,
+            geminiEndpointUrl = prefs[Keys.GEMINI_ENDPOINT_URL] ?: "",
+            geminiApiKey = prefs[Keys.GEMINI_API_KEY] ?: "",
             edgeEndpointUrl = prefs[Keys.EDGE_ENDPOINT_URL] ?: "",
             edgeBearerToken = prefs[Keys.EDGE_BEARER_TOKEN] ?: ""
         )
@@ -196,19 +219,27 @@ class PreferencesRepository(private val context: Context) {
 
     suspend fun saveDubbingSettings(settings: DubbingSettings) {
         context.autoDubDataStore.edit { prefs ->
+            prefs[Keys.VOICE_OPERATING_MODE] = settings.voiceOperatingMode.name
             prefs[Keys.VOICE_PROVIDER] = settings.defaultProvider.id
             prefs[Keys.VOICE_ID] = settings.defaultVoiceId
+            prefs[Keys.VOICE_PERSONALITY] = settings.defaultPersonality.id
+            prefs[Keys.VOICE_EMOTION] = settings.defaultEmotion.id
+            prefs[Keys.VOICE_CUSTOM_DESC] = settings.defaultCustomVoiceDescription.trim()
             prefs[Keys.VOICE_PITCH] = settings.defaultPitch.coerceIn(0.5f, 2.0f)
             prefs[Keys.VOICE_RATE] = settings.defaultSpeechRate.coerceIn(0.5f, 2.0f)
             prefs[Keys.VOICE_VOLUME] = settings.defaultVolume.coerceIn(0.0f, 1.0f)
             prefs[Keys.VOICE_ENABLED] = settings.voiceEnabled
             prefs[Keys.AUTO_PLAY] = settings.autoPlay
+            prefs[Keys.ENABLE_AUDIO_CACHE] = settings.enableAudioCache
             prefs[Keys.QUEUE_POLICY] = settings.audioQueuePolicy.name
             prefs[Keys.SOURCE_LANG] = settings.sourceLanguageCode
             prefs[Keys.TARGET_LANG] = settings.targetLanguageCode
             prefs[Keys.OCR_INTERVAL_MS] = settings.ocrIntervalMs.coerceIn(250L, 3000L)
             prefs[Keys.TRANSLATION_DELAY_MS] = settings.translationDelayMs.coerceIn(0L, 1500L)
             prefs[Keys.OCR_SENSITIVITY] = settings.ocrSensitivity.coerceIn(0.4f, 0.98f)
+            prefs[Keys.GEMINI_MODEL_ID] = settings.geminiModelId.trim().ifBlank { AppConstants.DEFAULT_GEMINI_TTS_MODEL }
+            prefs[Keys.GEMINI_ENDPOINT_URL] = settings.geminiEndpointUrl.trim()
+            prefs[Keys.GEMINI_API_KEY] = settings.geminiApiKey.trim()
             prefs[Keys.EDGE_ENDPOINT_URL] = settings.edgeEndpointUrl.trim()
             prefs[Keys.EDGE_BEARER_TOKEN] = settings.edgeBearerToken.trim()
         }
